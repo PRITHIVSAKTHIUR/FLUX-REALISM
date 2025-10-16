@@ -1,6 +1,6 @@
 # **FLUX-REALISM [FLUX Super Realism Image Generator]**
 
-> FLUX.1-Krea-dev + FLUX.1-Krea-dev
+> FLUX.1-Krea-dev + FLUX.1-dev
 
 A Gradio-based web application for generating hyper-realistic images using FLUX.1-dev with Super Realism LoRA enhancement. This application provides an intuitive interface for creating high-quality, photorealistic images with customizable parameters and styles.
 
@@ -141,4 +141,5 @@ This application uses models and components with their respective licenses:
 For technical issues or feature requests, refer to the respective model repositories:
 - FLUX.1-dev: black-forest-labs/FLUX.1-dev
 - Super Realism LoRA: strangerzonehf/Flux-Super-Realism-LoRA
+
 
