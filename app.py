@@ -413,7 +413,7 @@ footer {
 '''
 
 # Gradio interface
-with gr.Blocks(css=css, theme="bethecloud/storj_theme") as demo:
+with gr.Blocks() as demo:
     gr.Markdown(DESCRIPTION)
     with gr.Row():
         prompt = gr.Text(
@@ -540,4 +540,4 @@ with gr.Blocks(css=css, theme="bethecloud/storj_theme") as demo:
     )
 
 if __name__ == "__main__":
-    demo.queue(max_size=30).launch(mcp_server=True, ssr_mode=False, show_error=True)
+    demo.queue(max_size=30).launch(css=css, theme="bethecloud/storj_theme", mcp_server=True, ssr_mode=False, show_error=True)
