@@ -12,7 +12,8 @@ import time
 import zipfile
 from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5TokenizerFast
 
-# ---- CUDA Check ----
+from typing import Iterable
+
 print("CUDA_VISIBLE_DEVICES=", os.environ.get("CUDA_VISIBLE_DEVICES"))
 print("torch.__version__ =", torch.__version__)
 print("torch.version.cuda =", torch.version.cuda)
@@ -21,9 +22,6 @@ print("cuda device count:", torch.cuda.device_count())
 if torch.cuda.is_available():
     print("current device:", torch.cuda.current_device())
     print("device name:", torch.cuda.get_device_name(torch.cuda.current_device()))
-
-# Description for the app
-DESCRIPTION = """## flux realism hpc/."""
 
 # Helper functions
 def save_image(img):
@@ -404,28 +402,23 @@ css = '''
     max-width: 590px !important;
     margin: 0 auto !important;
 }
-h1 {
-    text-align: center;
-}
-footer {
-    visibility: hidden;
-}
+#main-title h1 { font-size: 2.3em !important; }
+
 '''
 
 # Gradio interface
 with gr.Blocks() as demo:
-    gr.Markdown(DESCRIPTION)
+    gr.Markdown("# **Flux-Realism-Dev**", elem_id="main-title")
+    result = gr.Gallery(label="Result", columns=1, show_label=False, preview=True)
     with gr.Row():
         prompt = gr.Text(
             label="Prompt",
-            show_label=False,
-            max_lines=1,
+            show_label=True,
+            max_lines=2,
             placeholder="Enter your prompt",
-            container=False,
         )
-        run_button = gr.Button("Run", scale=0, variant="primary")
-    result = gr.Gallery(label="Result", columns=1, show_label=False, preview=True)
-    
+    run_button = gr.Button("Run", scale=0, variant="primary")
+
     with gr.Row():
     # Model choice radio button above additional options
         model_choice = gr.Radio(
@@ -540,4 +533,8 @@ with gr.Blocks() as demo:
     )
 
 if __name__ == "__main__":
-    demo.queue(max_size=30).launch(css=css, theme="bethecloud/storj_theme", mcp_server=True, ssr_mode=False, show_error=True)
+    demo.queue(max_size=30).launch(css=css, theme=gr.themes.Soft(
+            primary_hue="blue",
+            secondary_hue="indigo",
+            neutral_hue="slate",
+        ), mcp_server=True, ssr_mode=False, show_error=True)
