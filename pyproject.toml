@@ -1,0 +1,28 @@
+[project]
+name = "flux-realism"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "accelerate",
+    "av>=17.0.1",
+    "diffusers",
+    "gradio>=6.14.0",
+    "hf-xet>=1.5.0",
+    "kernels>=0.14.1",
+    "peft",
+    "pillow>=12.2.0",
+    "requests>=2.34.2",
+    "safetensors>=0.8.0rc0",
+    "sentencepiece>=0.2.1",
+    "spaces>=0.50.2",
+    "torch==2.11.0",
+    "torchvision>=0.26.0",
+    "transformers>=5.9.0",
+]
+
+[tool.uv.sources]
+accelerate = { git = "https://github.com/huggingface/accelerate.git" }
+diffusers = { git = "https://github.com/huggingface/diffusers.git" }
+peft = { git = "https://github.com/huggingface/peft.git" }
