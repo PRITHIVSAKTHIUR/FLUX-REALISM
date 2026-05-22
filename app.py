@@ -19,43 +19,60 @@ print("torch.__version__ =", torch.__version__)
 print("torch.version.cuda =", torch.version.cuda)
 print("cuda available:", torch.cuda.is_available())
 print("cuda device count:", torch.cuda.device_count())
+
 if torch.cuda.is_available():
     print("current device:", torch.cuda.current_device())
     print("device name:", torch.cuda.get_device_name(torch.cuda.current_device()))
 
-# Helper functions
 def save_image(img):
     unique_name = str(uuid.uuid4()) + ".png"
     img.save(unique_name)
     return unique_name
+
 
 def randomize_seed_fn(seed: int, randomize_seed: bool) -> int:
     if randomize_seed:
         seed = random.randint(0, MAX_SEED)
     return seed
 
+
 MAX_SEED = np.iinfo(np.int32).max
 MAX_IMAGE_SIZE = 2048
 
-# Load pipelines for both models
-# Flux.1-dev-realism
 base_model_dev = "black-forest-labs/FLUX.1-dev"
-pipe_dev = DiffusionPipeline.from_pretrained(base_model_dev, torch_dtype=torch.bfloat16)
+
+pipe_dev = DiffusionPipeline.from_pretrained(
+    base_model_dev,
+    torch_dtype=torch.bfloat16
+)
+
 lora_repo = "strangerzonehf/Flux-Super-Realism-LoRA"
 trigger_word = "Super Realism"
+
 pipe_dev.load_lora_weights(lora_repo)
 pipe_dev.to("cuda")
 
-# Flux.1-krea
 dtype = torch.bfloat16
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# --- Model Loading ---
-taef1 = AutoencoderTiny.from_pretrained("madebyollin/taef1", torch_dtype=dtype).to(device)
-good_vae = AutoencoderKL.from_pretrained("black-forest-labs/FLUX.1-Krea-dev", subfolder="vae", torch_dtype=dtype).to(device)
-pipe_krea = DiffusionPipeline.from_pretrained("black-forest-labs/FLUX.1-Krea-dev", torch_dtype=dtype, vae=taef1).to(device)
+taef1 = AutoencoderTiny.from_pretrained(
+    "madebyollin/taef1",
+    torch_dtype=dtype
+).to(device)
 
-# Define the flux_pipe_call_that_returns_an_iterable_of_images for flux.1-krea
+good_vae = AutoencoderKL.from_pretrained(
+    "black-forest-labs/FLUX.1-Krea-dev",
+    subfolder="vae",
+    torch_dtype=dtype
+).to(device)
+
+pipe_krea = DiffusionPipeline.from_pretrained(
+    "black-forest-labs/FLUX.1-Krea-dev",
+    torch_dtype=dtype,
+    vae=taef1
+).to(device)
+
+
 @torch.inference_mode()
 def flux_pipe_call_that_returns_an_iterable_of_images(
     self,
@@ -77,6 +94,7 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
     max_sequence_length: int = 512,
     good_vae: Optional[Any] = None,
 ):
+
     height = height or self.default_sample_size * self.vae_scale_factor
     width = width or self.default_sample_size * self.vae_scale_factor
 
@@ -97,7 +115,12 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
     batch_size = 1 if isinstance(prompt, str) else len(prompt)
     device = self._execution_device
 
-    lora_scale = joint_attention_kwargs.get("scale", None) if joint_attention_kwargs is not None else None
+    lora_scale = (
+        joint_attention_kwargs.get("scale", None)
+        if joint_attention_kwargs is not None
+        else None
+    )
+
     prompt_embeds, pooled_prompt_embeds, text_ids = self.encode_prompt(
         prompt=prompt,
         prompt_2=prompt_2,
@@ -110,6 +133,7 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
     )
 
     num_channels_latents = self.transformer.config.in_channels // 4
+
     latents, latent_image_ids = self.prepare_latents(
         batch_size * num_images_per_prompt,
         num_channels_latents,
@@ -122,7 +146,9 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
     )
 
     sigmas = np.linspace(1.0, 1 / num_inference_steps, num_inference_steps)
+
     image_seq_len = latents.shape[1]
+
     mu = calculate_shift(
         image_seq_len,
         self.scheduler.config.base_image_seq_len,
@@ -130,6 +156,7 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
         self.scheduler.config.base_shift,
         self.scheduler.config.max_shift,
     )
+
     timesteps, num_inference_steps = retrieve_timesteps(
         self.scheduler,
         num_inference_steps,
@@ -138,11 +165,22 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
         sigmas,
         mu=mu,
     )
+
     self._num_timesteps = len(timesteps)
 
-    guidance = torch.full([1], guidance_scale, device=device, dtype=torch.float32).expand(latents.shape[0]) if self.transformer.config.guidance_embeds else None
+    guidance = (
+        torch.full(
+            [1],
+            guidance_scale,
+            device=device,
+            dtype=torch.float32
+        ).expand(latents.shape[0])
+        if self.transformer.config.guidance_embeds
+        else None
+    )
 
     for i, t in enumerate(timesteps):
+
         if self.interrupt:
             continue
 
@@ -160,24 +198,67 @@ def flux_pipe_call_that_returns_an_iterable_of_images(
             return_dict=False,
         )[0]
 
-        latents_for_image = self._unpack_latents(latents, height, width, self.vae_scale_factor)
-        latents_for_image = (latents_for_image / self.vae.config.scaling_factor) + self.vae.config.shift_factor
-        image = self.vae.decode(latents_for_image, return_dict=False)[0]
-        yield self.image_processor.postprocess(image, output_type=output_type)[0]
-        
-        latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+        latents_for_image = self._unpack_latents(
+            latents,
+            height,
+            width,
+            self.vae_scale_factor
+        )
+
+        latents_for_image = (
+            latents_for_image / self.vae.config.scaling_factor
+        ) + self.vae.config.shift_factor
+
+        image = self.vae.decode(
+            latents_for_image,
+            return_dict=False
+        )[0]
+
+        yield self.image_processor.postprocess(
+            image,
+            output_type=output_type
+        )[0]
+
+        latents = self.scheduler.step(
+            noise_pred,
+            t,
+            latents,
+            return_dict=False
+        )[0]
+
         torch.cuda.empty_cache()
 
-    latents = self._unpack_latents(latents, height, width, self.vae_scale_factor)
-    latents = (latents / good_vae.config.scaling_factor) + good_vae.config.shift_factor
-    image = good_vae.decode(latents, return_dict=False)[0]
+    latents = self._unpack_latents(
+        latents,
+        height,
+        width,
+        self.vae_scale_factor
+    )
+
+    latents = (
+        latents / good_vae.config.scaling_factor
+    ) + good_vae.config.shift_factor
+
+    image = good_vae.decode(
+        latents,
+        return_dict=False
+    )[0]
+
     self.maybe_free_model_hooks()
+
     torch.cuda.empty_cache()
-    yield self.image_processor.postprocess(image, output_type=output_type)[0]
 
-pipe_krea.flux_pipe_call_that_returns_an_iterable_of_images = flux_pipe_call_that_returns_an_iterable_of_images.__get__(pipe_krea)
+    yield self.image_processor.postprocess(
+        image,
+        output_type=output_type
+    )[0]
 
-# Helper functions for flux.1-krea
+
+pipe_krea.flux_pipe_call_that_returns_an_iterable_of_images = (
+    flux_pipe_call_that_returns_an_iterable_of_images.__get__(pipe_krea)
+)
+
+
 def calculate_shift(
     image_seq_len,
     base_seq_len: int = 256,
@@ -190,6 +271,7 @@ def calculate_shift(
     mu = image_seq_len * m + b
     return mu
 
+
 def retrieve_timesteps(
     scheduler,
     num_inference_steps: Optional[int] = None,
@@ -198,38 +280,83 @@ def retrieve_timesteps(
     sigmas: Optional[List[float]] = None,
     **kwargs,
 ):
+
     if timesteps is not None and sigmas is not None:
-        raise ValueError("Only one of `timesteps` or `sigmas` can be passed.")
+        raise ValueError(
+            "Only one of `timesteps` or `sigmas` can be passed."
+        )
+
     if timesteps is not None:
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
+
+        scheduler.set_timesteps(
+            timesteps=timesteps,
+            device=device,
+            **kwargs
+        )
+
         timesteps = scheduler.timesteps
         num_inference_steps = len(timesteps)
+
     elif sigmas is not None:
-        scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
+
+        scheduler.set_timesteps(
+            sigmas=sigmas,
+            device=device,
+            **kwargs
+        )
+
         timesteps = scheduler.timesteps
         num_inference_steps = len(timesteps)
+
     else:
-        scheduler.set_timesteps(num_inference_steps, device=device, **kwargs)
+
+        scheduler.set_timesteps(
+            num_inference_steps,
+            device=device,
+            **kwargs
+        )
+
         timesteps = scheduler.timesteps
+
     return timesteps, num_inference_steps
 
-# Styles for flux.1-dev-realism
 style_list = [
-    {"name": "3840 x 2160", "prompt": "hyper-realistic 8K image of {prompt}. ultra-detailed, lifelike, high-resolution, sharp, vibrant colors, photorealistic", "negative_prompt": ""},
-    {"name": "2560 x 1440", "prompt": "hyper-realistic 4K image of {prompt}. ultra-detailed, lifelike, high-resolution, sharp, vibrant colors, photorealistic", "negative_prompt": ""},
-    {"name": "HD+", "prompt": "hyper-realistic 2K image of {prompt}. ultra-detailed, lifelike, high-resolution, sharp, vibrant colors, photorealistic", "negative_prompt": ""},
-    {"name": "Style Zero", "prompt": "{prompt}", "negative_prompt": ""},
+    {
+        "name": "3840 x 2160",
+        "prompt": "hyper-realistic 8K image of {prompt}. ultra-detailed, lifelike, high-resolution, sharp, vibrant colors, photorealistic",
+        "negative_prompt": "",
+    },
+    {
+        "name": "2560 x 1440",
+        "prompt": "hyper-realistic 4K image of {prompt}. ultra-detailed, lifelike, high-resolution, sharp, vibrant colors, photorealistic",
+        "negative_prompt": "",
+    },
+    {
+        "name": "HD+",
+        "prompt": "hyper-realistic 2K image of {prompt}. ultra-detailed, lifelike, high-resolution, sharp, vibrant colors, photorealistic",
+        "negative_prompt": "",
+    },
+    {
+        "name": "Style Zero",
+        "prompt": "{prompt}",
+        "negative_prompt": "",
+    },
 ]
 
-styles = {k["name"]: (k["prompt"], k["negative_prompt"]) for k in style_list}
+styles = {
+    k["name"]: (k["prompt"], k["negative_prompt"])
+    for k in style_list
+}
+
 DEFAULT_STYLE_NAME = "3840 x 2160"
 STYLE_NAMES = list(styles.keys())
+
 
 def apply_style(style_name: str, positive: str) -> Tuple[str, str]:
     p, n = styles.get(style_name, styles[DEFAULT_STYLE_NAME])
     return p.replace("{prompt}", positive), n
 
-# Generation function for flux.1-dev-realism
+
 @spaces.GPU
 def generate_dev(
     prompt: str,
@@ -246,26 +373,36 @@ def generate_dev(
     zip_images: bool = False,
     progress=gr.Progress(track_tqdm=True),
 ):
-    positive_prompt, style_negative_prompt = apply_style(style_name, prompt)
-    
+
+    positive_prompt, style_negative_prompt = apply_style(
+        style_name,
+        prompt
+    )
+
     if use_negative_prompt:
-        final_negative_prompt = style_negative_prompt + " " + negative_prompt
+        final_negative_prompt = (
+            style_negative_prompt + " " + negative_prompt
+        )
     else:
         final_negative_prompt = style_negative_prompt
-    
+
     final_negative_prompt = final_negative_prompt.strip()
-    
+
     if trigger_word:
         positive_prompt = f"{trigger_word} {positive_prompt}"
-    
+
     seed = int(randomize_seed_fn(seed, randomize_seed))
+
     generator = torch.Generator(device="cuda").manual_seed(seed)
-    
+
     start_time = time.time()
-    
+
     images = pipe_dev(
         prompt=positive_prompt,
-        negative_prompt=final_negative_prompt if final_negative_prompt else None,
+        negative_prompt=(
+            final_negative_prompt
+            if final_negative_prompt else None
+        ),
         width=width,
         height=height,
         guidance_scale=guidance_scale,
@@ -274,23 +411,26 @@ def generate_dev(
         generator=generator,
         output_type="pil",
     ).images
-    
+
     end_time = time.time()
     duration = end_time - start_time
-    
+
     image_paths = [save_image(img) for img in images]
-    
+
     zip_path = None
+
     if zip_images:
         zip_name = str(uuid.uuid4()) + ".zip"
-        with zipfile.ZipFile(zip_name, 'w') as zipf:
+
+        with zipfile.ZipFile(zip_name, "w") as zipf:
             for i, img_path in enumerate(image_paths):
                 zipf.write(img_path, arcname=f"Img_{i}.png")
+
         zip_path = zip_name
-    
+
     return image_paths, seed, f"{duration:.2f}", zip_path
 
-# Generation function for flux.1-krea
+
 @spaces.GPU
 def generate_krea(
     prompt: str,
@@ -304,42 +444,52 @@ def generate_krea(
     zip_images: bool = False,
     progress=gr.Progress(track_tqdm=True),
 ):
+
     if randomize_seed:
         seed = random.randint(0, MAX_SEED)
+
     generator = torch.Generator().manual_seed(seed)
-    
+
     start_time = time.time()
-    
+
     images = []
+
     for _ in range(num_images):
-        final_img = list(pipe_krea.flux_pipe_call_that_returns_an_iterable_of_images(
-            prompt=prompt,
-            guidance_scale=guidance_scale,
-            num_inference_steps=num_inference_steps,
-            width=width,
-            height=height,
-            generator=generator,
-            output_type="pil",
-            good_vae=good_vae,
-        ))[-1]  # Take the final image only
+
+        final_img = list(
+            pipe_krea.flux_pipe_call_that_returns_an_iterable_of_images(
+                prompt=prompt,
+                guidance_scale=guidance_scale,
+                num_inference_steps=num_inference_steps,
+                width=width,
+                height=height,
+                generator=generator,
+                output_type="pil",
+                good_vae=good_vae,
+            )
+        )[-1]
+
         images.append(final_img)
-    
+
     end_time = time.time()
     duration = end_time - start_time
-    
+
     image_paths = [save_image(img) for img in images]
-    
+
     zip_path = None
+
     if zip_images:
         zip_name = str(uuid.uuid4()) + ".zip"
-        with zipfile.ZipFile(zip_name, 'w') as zipf:
+
+        with zipfile.ZipFile(zip_name, "w") as zipf:
             for i, img_path in enumerate(image_paths):
                 zipf.write(img_path, arcname=f"Img_{i}.png")
+
         zip_path = zip_name
-    
+
     return image_paths, seed, f"{duration:.2f}", zip_path
 
-# Main generation function to handle model choice
+
 @spaces.GPU
 def generate(
     model_choice: str,
@@ -357,7 +507,9 @@ def generate(
     zip_images: bool = False,
     progress=gr.Progress(track_tqdm=True),
 ):
+
     if model_choice == "flux.1-dev-realism":
+
         return generate_dev(
             prompt=prompt,
             negative_prompt=negative_prompt,
@@ -373,7 +525,9 @@ def generate(
             zip_images=zip_images,
             progress=progress,
         )
+
     elif model_choice == "flux.1-krea-dev":
+
         return generate_krea(
             prompt=prompt,
             seed=seed,
@@ -386,119 +540,203 @@ def generate(
             zip_images=zip_images,
             progress=progress,
         )
+
     else:
         raise ValueError("Invalid model choice")
 
-# Examples (tailored for flux.1-dev-realism)
 examples = [
-    "An attractive young woman with blue eyes lying face down on the bed, in the style of animated gifs, light white and light amber, jagged edges, the snapshot aesthetic, timeless beauty, goosepunk, sunrays shine upon it --no freckles --chaos 65 --ar 1:2 --profile yruxpc2 --stylize 750 --v 6.1",
-    "Headshot of handsome young man, wearing dark gray sweater with buttons and big shawl collar, brown hair and short beard, serious look on his face, black background, soft studio lighting, portrait photography --ar 85:128 --v 6.0 --style",
-    "Purple Dreamy, a medium-angle shot of a young woman with long brown hair, wearing a pair of eye-level glasses, stands in front of a backdrop of purple and white lights.",
-    "High-resolution photograph, woman, UHD, photorealistic, shot on a Sony A7III --chaos 20 --ar 1:2 --style raw --stylize 250"
+    "Ultra realistic cinematic portrait of a woman standing in neon rain, cyberpunk atmosphere",
+    "Professional fashion photography of a handsome man wearing black suit, studio lighting",
+    "Dreamy purple aesthetic portrait with glowing lights and glasses",
+    "Photorealistic mountain landscape during golden hour with volumetric lighting",
 ]
 
-css = '''
+
+css = """
 .gradio-container {
-    max-width: 590px !important;
-    margin: 0 auto !important;
+    max-width: 1600px !important;
+    margin: auto !important;
+    padding-top: 10px !important;
 }
-#main-title h1 { font-size: 2.3em !important; }
 
-'''
+#main-title {
+    text-align: left;
+    margin-bottom: 10px;
+}
 
-# Gradio interface
+#main-title h1 {
+    font-size: 2.5rem !important;
+    font-weight: 800 !important;
+}
+
+.left-column {
+    border-right: 1px solid rgba(255,255,255,0.08);
+    padding-right: 18px;
+}
+
+.right-column {
+    padding-left: 18px;
+}
+
+.run-btn {
+    height: 52px;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+}
+
+footer {
+    visibility: hidden;
+}
+"""
+
 with gr.Blocks() as demo:
-    gr.Markdown("# **Flux-Realism-Dev**", elem_id="main-title")
-    result = gr.Gallery(label="Result", columns=1, show_label=False, preview=True)
-    with gr.Row():
-        prompt = gr.Text(
-            label="Prompt",
-            show_label=True,
-            max_lines=2,
-            placeholder="Enter your prompt",
-        )
-    run_button = gr.Button("Run", scale=0, variant="primary")
 
     with gr.Row():
-    # Model choice radio button above additional options
-        model_choice = gr.Radio(
-            choices=["flux.1-krea-dev", "flux.1-dev-realism"],
-            label="Select Model",
-            value="flux.1-krea-dev"
-        )
-    
-    with gr.Accordion("Additional Options", open=False):
-        style_selection = gr.Dropdown(
-            label="Quality Style (for flux.1-dev-realism only)",
-            choices=STYLE_NAMES,
-            value=DEFAULT_STYLE_NAME,
-            interactive=True,
-        )
-        use_negative_prompt = gr.Checkbox(label="Use negative prompt (for flux.1-dev-realism only)", value=False)
-        negative_prompt = gr.Text(
-            label="Negative prompt",
-            max_lines=1,
-            placeholder="Enter a negative prompt",
-            visible=False,
-        )
-        seed = gr.Slider(
-            label="Seed",
-            minimum=0,
-            maximum=MAX_SEED,
-            step=1,
-            value=0,
-        )
-        randomize_seed = gr.Checkbox(label="Randomize seed", value=True)
-        with gr.Row():
-            width = gr.Slider(
-                label="Width",
-                minimum=512,
-                maximum=2048,
-                step=64,
-                value=1024,
-            )
-            height = gr.Slider(
-                label="Height",
-                minimum=512,
-                maximum=2048,
-                step=64,
-                value=1024,
-            )
-        guidance_scale = gr.Slider(
-            label="Guidance Scale",
-            minimum=0.1,
-            maximum=20.0,
-            step=0.1,
-            value=4.5,
-        )
-        num_inference_steps = gr.Slider(
-            label="Number of inference steps",
-            minimum=1,
-            maximum=40,
-            step=1,
-            value=28,
-        )
-        num_images = gr.Slider(
-            label="Number of images",
-            minimum=1,
-            maximum=5,
-            step=1,
-            value=1,
-        )
-        zip_images = gr.Checkbox(label="Zip generated images", value=False)
-        
-        gr.Markdown("### Output Information")
-        seed_display = gr.Textbox(label="Seed used", interactive=False)
-        generation_time = gr.Textbox(label="Generation time (seconds)", interactive=False)
-        zip_file = gr.File(label="Download ZIP")
 
-    gr.Examples(
-        examples=examples,
-        inputs=prompt,
-        outputs=[result, seed_display, generation_time, zip_file],
-        fn=generate,
-        cache_examples=False,
-    )
+        with gr.Column(scale=7, elem_classes="left-column"):
+
+            gr.Markdown(
+                "# Flux Realism Dev",
+                elem_id="main-title"
+            )
+
+            result = gr.Gallery(
+                label="Generated Images",
+                columns=2,
+                height=450,
+                preview=True,
+                object_fit="contain"
+            )
+
+            prompt = gr.Textbox(
+                label="Prompt",
+                placeholder="Enter your prompt...",
+                lines=4
+            )
+
+            run_button = gr.Button(
+                "Generate Images",
+                variant="primary",
+                elem_classes="run-btn"
+            )
+
+        with gr.Column(scale=3, elem_classes="right-column"):
+
+            model_choice = gr.Dropdown(
+                choices=[
+                    "flux.1-krea-dev",
+                    "flux.1-dev-realism"
+                ],
+                label="Select Model",
+                value="flux.1-krea-dev"
+            )
+
+            with gr.Accordion(
+                "Additional Options",
+                open=False
+            ):
+
+                style_selection = gr.Dropdown(
+                    label="Quality Style",
+                    choices=STYLE_NAMES,
+                    value=DEFAULT_STYLE_NAME,
+                    interactive=True,
+                )
+
+                use_negative_prompt = gr.Checkbox(
+                    label="Use Negative Prompt",
+                    value=False
+                )
+
+                negative_prompt = gr.Textbox(
+                    label="Negative Prompt",
+                    lines=2,
+                    placeholder="Enter negative prompt",
+                    visible=False,
+                )
+
+                seed = gr.Slider(
+                    label="Seed",
+                    minimum=0,
+                    maximum=MAX_SEED,
+                    step=1,
+                    value=0,
+                )
+
+                randomize_seed = gr.Checkbox(
+                    label="Randomize Seed",
+                    value=True
+                )
+
+                with gr.Row():
+
+                    width = gr.Slider(
+                        label="Width",
+                        minimum=512,
+                        maximum=2048,
+                        step=64,
+                        value=1024,
+                    )
+
+                    height = gr.Slider(
+                        label="Height",
+                        minimum=512,
+                        maximum=2048,
+                        step=64,
+                        value=1024,
+                    )
+
+                guidance_scale = gr.Slider(
+                    label="Guidance Scale",
+                    minimum=0.1,
+                    maximum=20.0,
+                    step=0.1,
+                    value=4.5,
+                )
+
+                num_inference_steps = gr.Slider(
+                    label="Inference Steps",
+                    minimum=1,
+                    maximum=40,
+                    step=1,
+                    value=28,
+                )
+
+                num_images = gr.Slider(
+                    label="Number of Images",
+                    minimum=1,
+                    maximum=5,
+                    step=1,
+                    value=1,
+                )
+
+                zip_images = gr.Checkbox(
+                    label="Zip Generated Images",
+                    value=False
+                )
+
+                gr.Markdown("### Output Information")
+
+                seed_display = gr.Textbox(
+                    label="Seed Used",
+                    interactive=False
+                )
+
+                generation_time = gr.Textbox(
+                    label="Generation Time (s)",
+                    interactive=False
+                )
+
+                zip_file = gr.File(
+                    label="Download ZIP"
+                )
+
+            gr.Markdown("## Examples")
+
+            gr.Examples(
+                examples=examples,
+                inputs=prompt,
+            )
 
     use_negative_prompt.change(
         fn=lambda x: gr.update(visible=x),
@@ -528,13 +766,20 @@ with gr.Blocks() as demo:
             num_images,
             zip_images,
         ],
-        outputs=[result, seed_display, generation_time, zip_file],
+        outputs=[
+            result,
+            seed_display,
+            generation_time,
+            zip_file,
+        ],
         api_name="run",
     )
 
 if __name__ == "__main__":
-    demo.queue(max_size=30).launch(css=css, theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="indigo",
-            neutral_hue="slate",
-        ), mcp_server=True, ssr_mode=False, show_error=True)
+
+    demo.queue(max_size=30).launch(
+        css=css,
+        mcp_server=True,
+        ssr_mode=False,
+        show_error=True,
+    )
