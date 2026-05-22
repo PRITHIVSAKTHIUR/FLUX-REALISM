@@ -1,145 +1,116 @@
-# **FLUX-REALISM [FLUX Super Realism Image Generator]**
+# **FLUX-REALISM**
 
-> FLUX.1-Krea-dev + FLUX.1-dev
+FLUX-REALISM is an experimental, advanced image generation application designed to provide highly realistic image synthesis workflows. Powered by the state-of-the-art FLUX architecture, the suite offers a dual-model workspace featuring FLUX.1-Krea-dev and a specialized FLUX.1-dev pipeline integrated with a realism-enhancing LoRA (strangerzonehf/Flux-Super-Realism-LoRA). The application provides an interactive web interface optimized with custom quality presets, negative prompt expansion rules, and on-the-fly VAE decoding switches (incorporating madebyollin/taef1 for preview stages and a high-fidelity Krea VAE for final selection frames). Fully GPU-accelerated and capable of yielding images up to 2048x2048, FLUX-REALISM acts as a powerful testing suite for researchers and creators exploring photorealistic text-to-image boundaries.
 
-A Gradio-based web application for generating hyper-realistic images using FLUX.1-dev with Super Realism LoRA enhancement. This application provides an intuitive interface for creating high-quality, photorealistic images with customizable parameters and styles.
+<img width="1747" height="1097" alt="image" src="https://github.com/user-attachments/assets/a9b76dc7-33f1-46c4-a97c-a57dc57562cb" />
 
-## Features
+### **Key Features**
 
-- **Hyper-realistic image generation** using FLUX.1-dev with Super Realism LoRA
-- **Multiple quality presets** (8K, 4K, 2K, and Style Zero)
-- **Customizable parameters** including dimensions, guidance scale, and inference steps
-- **Batch generation** support for up to 5 images simultaneously
-- **ZIP download** option for generated image batches
-- **Seed control** with randomization option for reproducible results
-- **Negative prompting** support for better content control
-- **Real-time generation tracking** with timing information
+* **Dual-Model Inference:** Seamlessly alternate between the fast, iteration-friendly flux.1-krea-dev pipeline and the hyper-detailed flux.1-dev-realism pipeline equipped with a dedicated realism LoRA adapter.
+* **Custom Quality Style Presets:** Built-in resolution and prompt styling configurations (e.g., Ultra HD 4K, 8K Cinematic) that automatically rewrite user prompts to maximize environmental detail, photorealism, and lifelike clarity.
+* **Iterative Image Streaming:** Features a specialized flux_pipe_call_that_returns_an_iterable_of_images implementation that hooks into the pipeline's denoising loop to deliver continuous generation feedback.
+* **Granular Generation Controls:** Complete control over generation dimensions (up to 2048px), inference steps, seed randomization, and guidance scale settings.
+* **Automated Batch Export:** Supports packaging multiple generated images into a single downloadable ZIP archive instantly on the frontend.
 
-## Requirements
+### **Repository Structure**
 
-### System Requirements
-- CUDA-compatible GPU (recommended: 8GB+ VRAM)
-- Python 3.8+
-- CUDA toolkit installed
+```text
+├── app.py
+├── LICENSE
+├── pre-requirements.txt
+├── pyproject.toml
+├── README.md
+├── requirements.txt
+└── uv.lock
 
-### Dependencies
 ```
-torch
-gradio
-diffusers
-Pillow
-numpy
+
+### **Installation and Requirements**
+
+To run FLUX-REALISM locally, configure a Python environment with the following dependencies. A compatible CUDA-enabled GPU with sufficient VRAM is required to execute FLUX.1 models.
+
+**Standard PIP Installation**
+
+1. Update pip:
+
+```bash
+pip install pip>=26.1.1
+
+```
+
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+
+```
+
+#### **Running with uv (Recommended)**
+
+uv is an extremely fast Python package and project manager written in Rust, which ensures rapid environment setup and complete reproducibility.
+
+**Step 1 — Install uv**
+
+* **macOS / Linux:** curl -LsSf [https://astral.sh/uv/install.sh](https://astral.sh/uv/install.sh) | sh
+* **Windows:** powershell -c "irm [https://astral.sh/uv/install.ps1](https://astral.sh/uv/install.ps1) | iex"
+
+**Step 2 — Clone the repository**
+
+```bash
+git clone https://github.com/PRITHIVSAKTHIUR/FLUX-REALISM.git
+cd FLUX-REALISM
+
+```
+
+**Step 3 — Initialize the project and install dependencies**
+
+```bash
+uv sync
+
+```
+
+**Step 4 — Run the script**
+
+```bash
+uv run app.py
+
+```
+
+---
+
+### **Core Requirements List**
+
+The application depends on the following primary packages (defined in requirements.txt):
+
+```text
+git+https://github.com/huggingface/accelerate.git
+git+https://github.com/huggingface/diffusers.git
+git+https://github.com/huggingface/peft.git
+sentencepiece
+transformers
+safetensors
+torch==2.11.0
+torchvision
+requests
+kernels
+hf_xet
 spaces
+pillow
+gradio
+av
+
 ```
 
-## Installation
+### **Usage**
 
-1. Clone or download the application files
-2. Install required dependencies:
-```bash
-pip install torch gradio diffusers Pillow numpy spaces
-```
-3. Ensure CUDA is properly configured for GPU acceleration
+Once the application is running, open your browser to the local address provided in your terminal (typically [http://127.0.0.1:7860/](http://127.0.0.1:7860/)).
 
-## Usage
+1. **Select Model:** Choose your base model pipeline from the dropdown menu (flux.1-krea-dev or flux.1-dev-realism).
+2. **Enter Prompt:** Describe your scene inside the main prompt text field (e.g., *"Ultra realistic cinematic portrait of a woman standing in neon rain"*).
+3. **Configure Options:** Expand the "Additional Options" accordion to modify inference parameters, choose quality styles, toggle negative prompts, or enable ZIP compilation.
+4. **Generate:** Click "Generate Images" to execute. The output gallery will display results, along with specific execution time and final seed metadata.
 
-### Running the Application
+### **License and Source**
 
-Execute the main script to start the Gradio interface:
-```bash
-python app.py
-```
-
-The application will launch a web interface accessible at `http://localhost:7860`
-
-### Interface Components
-
-#### Main Controls
-- **Prompt Input**: Enter your image description
-- **Run Button**: Generate images based on current settings
-
-#### Quality Styles
-- **3840 x 2160**: 8K hyper-realistic output
-- **2560 x 1440**: 4K hyper-realistic output  
-- **HD+**: 2K hyper-realistic output
-- **Style Zero**: Basic prompt without enhancement
-
-#### Advanced Options
-- **Negative Prompt**: Specify elements to exclude from generation
-- **Seed Control**: Set specific seed or use randomization
-- **Dimensions**: Adjust width and height (512-2048px)
-- **Guidance Scale**: Control adherence to prompt (0.1-20.0)
-- **Inference Steps**: Quality vs speed trade-off (1-40 steps)
-- **Batch Size**: Generate 1-5 images simultaneously
-- **ZIP Export**: Download all generated images as archive
-
-### Example Prompts
-
-The application includes several example prompts demonstrating effective usage:
-
-1. Professional portrait photography
-2. Environmental character shots
-3. Studio lighting setups
-4. Artistic portrait compositions
-
-## Model Information
-
-- **Base Model**: black-forest-labs/FLUX.1-dev
-- **LoRA Enhancement**: strangerzonehf/Flux-Super-Realism-LoRA
-- **Trigger Word**: "Super Realism" (automatically prepended)
-- **Precision**: bfloat16 for optimal performance
-
-## Configuration
-
-### Style Presets
-The application includes predefined style templates that automatically enhance prompts with quality descriptors:
-- Ultra-detailed rendering
-- Lifelike textures
-- High-resolution output
-- Sharp focus and vibrant colors
-- Photorealistic results
-
-### Default Settings
-- Resolution: 1024x1024px
-- Guidance Scale: 3.0
-- Inference Steps: 30
-- Randomized seed enabled
-- Single image generation
-
-## Performance Notes
-
-- GPU acceleration required for practical usage
-- Generation time varies based on resolution and step count
-- Higher inference steps improve quality but increase processing time
-- Batch generation processes images sequentially
-
-## File Management
-
-Generated images are automatically saved with unique UUID filenames in PNG format. The ZIP export feature creates compressed archives containing all generated images with sequential naming.
-
-## Troubleshooting
-
-### Common Issues
-- **CUDA out of memory**: Reduce image dimensions or batch size
-- **Slow generation**: Decrease inference steps or resolution
-- **Model loading errors**: Ensure stable internet connection for initial model download
-
-### Performance Optimization
-- Use lower guidance scales (2.0-4.0) for faster generation
-- Reduce inference steps for quicker results
-- Monitor VRAM usage with multiple image generation
-
-## License
-
-This application uses models and components with their respective licenses:
-- FLUX.1-dev model licensing applies
-- LoRA weights subject to their repository terms
-- Application code available for modification and redistribution
-
-## Support
-
-For technical issues or feature requests, refer to the respective model repositories:
-- FLUX.1-dev: black-forest-labs/FLUX.1-dev
-- Super Realism LoRA: strangerzonehf/Flux-Super-Realism-LoRA
-
-
+* **License:** [Apache-2.0 license](https://github.com/PRITHIVSAKTHIUR/FLUX-REALISM?tab=Apache-2.0-1-ov-file)
+* **GitHub Repository:** [https://github.com/PRITHIVSAKTHIUR/FLUX-REALISM](https://github.com/PRITHIVSAKTHIUR/FLUX-REALISM)
